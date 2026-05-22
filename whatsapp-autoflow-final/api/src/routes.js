@@ -66,6 +66,8 @@ router.get("/dashboard", auth, async (_req, res) => {
   }
   upcoming.sort((a, b) => a.next - b.next);
 
+  const pipelineActive = await PipelineContact.countDocuments({ status: { $nin: ["ended"] } });
+
   res.json({
     recurringActive,
     recurringTotal,
@@ -73,6 +75,7 @@ router.get("/dashboard", auth, async (_req, res) => {
     templates,
     recentAudit,
     upcoming: upcoming.slice(0, 5),
+    pipelineActive,
   });
 });
 
