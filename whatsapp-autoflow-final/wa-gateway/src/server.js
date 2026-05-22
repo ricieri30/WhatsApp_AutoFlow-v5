@@ -20,9 +20,11 @@ function normalizePhone(jid = '') {
 function addContact(contact) {
   if (!contact.id || contact.id.includes('@g.us')) return; // ignorar grupos
   const phone = normalizePhone(contact.id);
+  const existing = contactsMap.get(contact.id) || {};
+  const name = contact.name || contact.notify || contact.verifiedName || existing.name || null;
   contactsMap.set(contact.id, {
     id: contact.id,
-    name: contact.name || contact.notify || contact.verifiedName || null,
+    name,
     phone,
   });
 }
@@ -35,6 +37,14 @@ async function start() {
   sock.ev.on("creds.update", saveCreds);
 
   // ── Capturar contatos ─────────────────────────────────────────
+  sock.ev.on("messaging-history.set", ({ contacts }) => {
+    if (contacts) contacts.forEach(addContact);
+  });
+
+  sock.ev.on("contacts.set", ({ contacts }) => {
+    if (contacts) contacts.forEach(addContact);
+  });
+
   sock.ev.on("contacts.upsert", (contacts) => {
     contacts.forEach(addContact);
   });
@@ -42,7 +52,8 @@ async function start() {
   sock.ev.on("contacts.update", (contacts) => {
     contacts.forEach(c => {
       const existing = contactsMap.get(c.id) || {};
-      contactsMap.set(c.id, { ...existing, ...c, phone: normalizePhone(c.id) });
+      const name = c.name || c.notify || c.verifiedName || existing.name || null;
+      contactsMap.set(c.id, { ...existing, ...c, name, phone: normalizePhone(c.id) });
     });
   });
 
@@ -50,16 +61,26 @@ async function start() {
   sock.ev.on("chats.upsert", (chats) => {
     chats.forEach(chat => {
       if (chat.id && !chat.id.includes('@g.us')) {
-        const existing = contactsMap.get(chat.id) || {};
-        if (!existing.id) {
-          contactsMap.set(chat.id, {
-            id: chat.id,
-            name: chat.name || null,
-            phone: normalizePhone(chat.id),
-          });
-        }
+        addContact({ id: chat.id, name: chat.name });
       }
     });
+  });
+
+  sock.ev.on("chats.update", (chats) => {
+    chats.forEach(chat => {
+      if (chat.id && !chat.id.includes('@g.us')) {
+        addContact({ id: chat.id, name: chat.name });
+      }
+    });
+  });
+
+  // Capturar nomes de mensagens recebidas (pushName)
+  sock.ev.on("messages.upsert", ({ messages }) => {
+    for (const msg of messages) {
+      if (!msg.key.fromMe && msg.pushName && msg.key.remoteJid && !msg.key.remoteJid.includes('@g.us')) {
+        addContact({ id: msg.key.remoteJid, notify: msg.pushName });
+      }
+    }
   });
 
   sock.ev.on("connection.update", async (u) => {

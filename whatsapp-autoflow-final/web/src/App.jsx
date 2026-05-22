@@ -41,7 +41,6 @@ function PhoneAutocomplete({ value, onChange, placeholder = 'Ex: 5511999999999',
   }, [])
 
   async function fetchSuggestions(q) {
-    if (!q) { setSuggestions([]); setOpen(false); return }
     setLoading(true)
     try {
       const data = await api(`whatsapp/contacts?q=${encodeURIComponent(q)}&limit=8`)
@@ -71,7 +70,7 @@ function PhoneAutocomplete({ value, onChange, placeholder = 'Ex: 5511999999999',
           className={className || inputCls}
           value={value}
           onChange={handleInput}
-          onFocus={() => value && suggestions.length > 0 && setOpen(true)}
+          onFocus={() => fetchSuggestions(value)}
           placeholder={placeholder}
           autoComplete='off'
         />
@@ -576,7 +575,7 @@ export default function App(){
         <nav className='flex-1 p-3 space-y-1'>
           <SidebarItem icon={LayoutDashboard} label='Visão Geral'  active={view==='dashboard'} onClick={()=>setView('dashboard')}/>
           <SidebarItem icon={Users}           label='Clientes'     active={view==='contacts'}  onClick={()=>setView('contacts')}/>
-          <SidebarItem icon={CalendarClock}   label='Esteira'      active={view==='pipeline'}  onClick={()=>setView('pipeline')} badge={metrics?.pipelineActive||null}/>
+          <SidebarItem icon={CalendarClock}   label='Esteira'      active={view==='pipeline'}  onClick={()=>setView('pipeline')}/>
           <SidebarItem icon={Bell}            label='Automações'   active={view==='recurring'} onClick={()=>setView('recurring')} badge={dashboard.recurringActive||null}/>
           <SidebarItem icon={MessageSquareReply} label='Respostas Auto' active={view==='autoReply'} onClick={()=>setView('autoReply')}/>
           <SidebarItem icon={CalendarClock}   label='Agendamentos' active={view==='templates'} onClick={()=>setView('templates')}/>
@@ -1807,17 +1806,17 @@ function ClientsView() {
 
   // Mensagens de notificação editáveis (localStorage para simplicidade)
   const [notifTexts, setNotifTexts] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('autoflow_notif_texts') || 'null') } catch {}
-    return null
-  }) || {
-    msg7d: 'Olá {{nome}}! Sua assinatura vence em 7 dias. Deseja renovar?',
-    msgToday: 'Olá {{nome}}! Sua assinatura expira hoje. Entre em contato para renovar.',
-  }
+    try {
+      const saved = localStorage.getItem('autoflow_notif_texts');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return {
+      msg7d: 'Olá {{nome}}! Sua assinatura vence em 7 dias. Deseja renovar?',
+      msgToday: 'Olá {{nome}}! Sua assinatura expira hoje. Entre em contato para renovar.',
+    };
+  });
 
-  const [notifForm, setNotifForm] = useState(notifTexts || {
-    msg7d: 'Olá {{nome}}! Sua assinatura vence em 7 dias. Deseja renovar?',
-    msgToday: 'Olá {{nome}}! Sua assinatura expira hoje. Entre em contato para renovar.',
-  })
+  const [notifForm, setNotifForm] = useState(notifTexts);
 
   const emptyForm = { phone: '', name: '', tags: '', startDate: '', endDate: '' }
   const [form, setForm] = useState(emptyForm)
