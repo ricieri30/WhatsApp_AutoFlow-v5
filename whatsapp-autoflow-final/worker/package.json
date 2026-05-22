@@ -1,0 +1,16 @@
+{
+  "name": "wa-worker",
+  "type": "module",
+  "version": "1.0.0",
+  "main": "src/worker.js",
+  "scripts": {
+    "start": "node src/worker.js"
+  },
+  "dependencies": {
+    "bullmq": "^5.68.0",
+    "dotenv": "^16.4.5",
+    "ioredis": "^5.4.1",
+    "mongoose": "^8.13.2",
+    "node-fetch": "^3.3.2"
+  }
+}
