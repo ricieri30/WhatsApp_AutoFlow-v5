@@ -18,7 +18,7 @@ function normalizePhone(jid = '') {
 }
 
 function addContact(contact) {
-  if (!contact.id || contact.id.includes('@g.us')) return; // ignorar grupos
+  if (!contact.id || contact.id.includes('@g.us') || contact.id.includes('@broadcast')) return; // ignorar grupos e transmissões
   const phone = normalizePhone(contact.id);
   const existing = contactsMap.get(contact.id) || {};
   // Priorizar nomes vindos do evento, senão manter o que já temos
@@ -29,6 +29,10 @@ function addContact(contact) {
     name,
     phone,
   });
+
+  if (contactsMap.size % 100 === 0) {
+    console.log(`[Gateway] contactsMap size: ${contactsMap.size}`);
+  }
 }
 
 async function start() {
@@ -39,8 +43,13 @@ async function start() {
   sock.ev.on("creds.update", saveCreds);
 
   // ── Capturar contatos ─────────────────────────────────────────
-  sock.ev.on("messaging-history.set", ({ contacts }) => {
+  sock.ev.on("messaging-history.set", ({ contacts, chats }) => {
     if (contacts) contacts.forEach(addContact);
+    if (chats) chats.forEach(c => addContact({ id: c.id, name: c.name }));
+  });
+
+  sock.ev.on("chats.set", ({ chats }) => {
+    if (chats) chats.forEach(c => addContact({ id: c.id, name: c.name }));
   });
 
   sock.ev.on("contacts.set", ({ contacts }) => {

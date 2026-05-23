@@ -215,7 +215,7 @@ function ContactSelect({ value, onChange, placeholder = 'Todos os contatos', cla
             )}
             {!loading && contacts.map(c => (
               <button
-                key={c.id}
+                key={c.jid || c._id || c.id}
                 type='button'
                 onMouseDown={() => pick(c)}
                 className={cls(
@@ -2435,8 +2435,7 @@ function PipelineView() {
                   <span className='text-xs text-slate-500'>Horário de envio</span>
                   <input type='time' className={cls(inputCls,'w-28 text-sm')} value={w.sendTime||'08:00'}
                     onChange={e=>{
-                      const weeks = [...pipelineCfg.weeks]
-                      weeks[i] = { ...weeks[i], sendTime: e.target.value }
+                      const weeks = pipelineCfg.weeks.map(wk => wk.week === w.week ? { ...wk, sendTime: e.target.value } : wk)
                       setPipelineCfg({ ...pipelineCfg, weeks })
                     }}/>
                 </div>
@@ -2445,8 +2444,7 @@ function PipelineView() {
                 <textarea className={cls(inputCls,'min-h-[90px] resize-y')}
                   value={w.message||''}
                   onChange={e=>{
-                    const weeks = [...pipelineCfg.weeks]
-                    weeks[i] = { ...weeks[i], message: e.target.value }
+                    const weeks = pipelineCfg.weeks.map(wk => wk.week === w.week ? { ...wk, message: e.target.value } : wk)
                     setPipelineCfg({ ...pipelineCfg, weeks })
                   }}
                   placeholder={`Ex: Olá {{nome}}! Chegou a ${w.week === 3 ? 'última semana' : `semana ${w.week}`} do seu plano. Aproveite ao máximo!`}/>
@@ -2454,8 +2452,7 @@ function PipelineView() {
               <Field label='URL de mídia (opcional — imagem, vídeo ou documento)'>
                 <input className={inputCls} value={w.mediaUrl||''}
                   onChange={e=>{
-                    const weeks = [...pipelineCfg.weeks]
-                    weeks[i] = { ...weeks[i], mediaUrl: e.target.value }
+                    const weeks = pipelineCfg.weeks.map(wk => wk.week === w.week ? { ...wk, mediaUrl: e.target.value } : wk)
                     setPipelineCfg({ ...pipelineCfg, weeks })
                   }}
                   placeholder='https://... (link público da mídia)'/>
@@ -2518,7 +2515,7 @@ function PipelineView() {
                 <div className='flex items-center gap-2'>
                   <select className={cls(inputCls,'w-36 text-sm py-1')} value={step.type||'text'}
                     onChange={e=>{
-                      const steps=[...onboardCfg.steps]; steps[i]={...steps[i],type:e.target.value}
+                      const steps = onboardCfg.steps.map(st => st.order === step.order ? { ...st, type: e.target.value } : st)
                       setOnboardCfg({...onboardCfg,steps})
                     }}>
                     <option value='text'>Texto</option>
@@ -2537,19 +2534,28 @@ function PipelineView() {
               </div>
               <Field label={step.type==='text'?'Texto da mensagem':'Legenda (opcional)'}>
                 <textarea className={cls(inputCls,'min-h-[70px] resize-y')} value={step.content||''}
-                  onChange={e=>{const steps=[...onboardCfg.steps];steps[i]={...steps[i],content:e.target.value};setOnboardCfg({...onboardCfg,steps})}}
+                  onChange={e=>{
+                    const steps = onboardCfg.steps.map(st => st.order === step.order ? { ...st, content: e.target.value } : st)
+                    setOnboardCfg({...onboardCfg,steps})
+                  }}
                   placeholder='Ex: Bem-vindo {{nome}}! Aqui está sua apresentação...'/>
               </Field>
               {step.type!=='text' && (
                 <Field label='URL da mídia'>
                   <input className={inputCls} value={step.mediaUrl||''}
-                    onChange={e=>{const steps=[...onboardCfg.steps];steps[i]={...steps[i],mediaUrl:e.target.value};setOnboardCfg({...onboardCfg,steps})}}
+                    onChange={e=>{
+                      const steps = onboardCfg.steps.map(st => st.order === step.order ? { ...st, mediaUrl: e.target.value } : st)
+                      setOnboardCfg({...onboardCfg,steps})
+                    }}
                     placeholder='https://... (link público da mídia)'/>
                 </Field>
               )}
               <Field label='Aguardar após passo anterior (segundos)'>
                 <input type='number' className={inputCls} value={step.delayAfterPrev||0} min={0}
-                  onChange={e=>{const steps=[...onboardCfg.steps];steps[i]={...steps[i],delayAfterPrev:parseInt(e.target.value)||0};setOnboardCfg({...onboardCfg,steps})}}/>
+                  onChange={e=>{
+                    const steps = onboardCfg.steps.map(st => st.order === step.order ? { ...st, delayAfterPrev: parseInt(e.target.value)||0 } : st)
+                    setOnboardCfg({...onboardCfg,steps})
+                  }}/>
               </Field>
             </div>
           ))}

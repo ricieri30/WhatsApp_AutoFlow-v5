@@ -12,7 +12,12 @@ const Recurring        = m("Recurring",        {}, "recurrings");
 const Contact          = m("Contact",          {}, "contacts");
 const Template         = m("Template",         {}, "templates");
 const Audit            = m("Audit",            {}, "audits");
-const WAContact        = m("WAContact",        {}, "wacontacts");
+const WAContact = mongoose.model("WAContact", new mongoose.Schema({
+  jid: { type: String, unique: true, index: true },
+  name: { type: String, index: true },
+  phone: { type: String, index: true },
+  updatedAt: { type: Date, default: Date.now },
+}), "wacontacts");
 const ScheduledMessage = m("ScheduledMessage", {}, "scheduledmessages");
 const PipelineContact  = m("PipelineContact",  {}, "pipelinecontacts");
 const OnboardingConfig = m("OnboardingConfig", {}, "onboardingconfigs");
@@ -234,6 +239,7 @@ new Worker("wa-scheduler", async (job) => {
       const r = await fetch(`${process.env.WA_GATEWAY_URL}/contacts?limit=10000`);
       if (!r.ok) throw new Error(`Gateway returned ${r.status}`);
       const contacts = await r.json();
+      console.log(`[Worker] Recebidos ${contacts.length} contatos do gateway.`);
 
       let updated = 0;
       for (const c of contacts) {
@@ -244,6 +250,9 @@ new Worker("wa-scheduler", async (job) => {
           { upsert: true }
         );
         updated++;
+        if (updated % 100 === 0) {
+          console.log(`[Worker] Sincronizados ${updated}/${contacts.length} contatos...`);
+        }
       }
 
       await Audit.create({
