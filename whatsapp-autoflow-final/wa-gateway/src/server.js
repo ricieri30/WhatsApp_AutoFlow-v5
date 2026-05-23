@@ -57,19 +57,23 @@ async function start() {
 
   // ── Capturar contatos ─────────────────────────────────────────
   sock.ev.on("messaging-history.set", ({ contacts, chats }) => {
+    console.log(`[Baileys] messaging-history.set: ${contacts?.length||0} contatos, ${chats?.length||0} chats`);
     if (contacts) contacts.forEach(addContact);
     if (chats) chats.forEach(c => addContact({ id: c.id, name: c.name }));
   });
 
   sock.ev.on("chats.set", ({ chats }) => {
+    console.log(`[Baileys] chats.set: ${chats?.length||0} chats`);
     if (chats) chats.forEach(c => addContact({ id: c.id, name: c.name }));
   });
 
   sock.ev.on("contacts.set", ({ contacts }) => {
+    console.log(`[Baileys] contacts.set: ${contacts?.length||0} contatos`);
     if (contacts) contacts.forEach(addContact);
   });
 
   sock.ev.on("contacts.upsert", (contacts) => {
+    console.log(`[Baileys] contacts.upsert: ${contacts?.length||0} contatos`);
     contacts.forEach(addContact);
   });
 

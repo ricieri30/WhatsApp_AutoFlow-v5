@@ -42,12 +42,14 @@ function PhoneAutocomplete({ value, onChange, onSelect, placeholder = 'Ex: 55119
 
   async function fetchSuggestions(q) {
     setLoading(true)
+    setOpen(true)
     try {
       const data = await api(`whatsapp/contacts?q=${encodeURIComponent(q)}&limit=8`)
       setSuggestions(Array.isArray(data) ? data : [])
-      setOpen(true)
-    } catch { setSuggestions([]) }
-    finally { setLoading(false) }
+    } catch(e) {
+      console.error('[PhoneAutocomplete] Error:', e.message)
+      setSuggestions([])
+    } finally { setLoading(false) }
   }
 
   function handleInput(e) {
@@ -80,7 +82,7 @@ function PhoneAutocomplete({ value, onChange, onSelect, placeholder = 'Ex: 55119
         )}
       </div>
 
-      {open && (suggestions.length > 0 || loading) && (
+      {open && (
         <div className='absolute z-50 left-0 right-0 mt-1 bg-slate-800 border border-slate-600 rounded-xl shadow-xl overflow-hidden'>
           {suggestions.map(c => (
             <button
@@ -425,7 +427,7 @@ export default function App(){
   const [user,setUser]       = useState(null)
   const [checking,setChecking] = useState(true)  // validando token
   const [view,setView]       = useState('dashboard')
-  const [dashboard,setDashboard] = useState({recurringActive:0,contacts:0,templates:0,lastSync:null})
+  const [dashboard,setDashboard] = useState({recurringActive:0,contacts:0,templates:0,lastSync:null,cachedContactsCount:0})
   const [recurring,setRecurring] = useState([])
   const [templates,setTemplates] = useState([])
   const [audit,setAudit]     = useState([])
@@ -628,9 +630,15 @@ export default function App(){
               <div>
                 <h1 className='text-xl font-bold text-white'>Visão Geral</h1>
                 {dashboard.lastSync && (
-                  <div className='text-xs text-slate-500 mt-0.5 flex items-center gap-1'>
-                    <span className='w-1 h-1 rounded-full bg-emerald-500'/>
-                    Última sincronização de contatos: {new Date(dashboard.lastSync).toLocaleString('pt-BR')}
+                  <div className='text-xs text-slate-500 mt-0.5 flex flex-col gap-0.5'>
+                    <div className='flex items-center gap-1.5'>
+                      <span className='w-1.5 h-1.5 rounded-full bg-emerald-500'/>
+                      <span>Última sincronização: {new Date(dashboard.lastSync).toLocaleString('pt-BR')}</span>
+                    </div>
+                    <div className='flex items-center gap-1.5'>
+                      <span className='w-1.5 h-1.5 rounded-full bg-indigo-500'/>
+                      <span>{dashboard.cachedContactsCount || 0} contatos no banco local</span>
+                    </div>
                   </div>
                 )}
               </div>

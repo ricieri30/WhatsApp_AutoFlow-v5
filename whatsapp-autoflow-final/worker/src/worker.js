@@ -291,7 +291,7 @@ new Worker("wa-scheduler", async (job) => {
       });
       console.log(`✅ [Sync] Concluída: ${updated} contatos em ${duration}s.`);
     } catch (e) {
-      console.error("❌ Falha na sincronização de contatos:", e.message);
+      console.error("❌ [Sync] Falha crítica na sincronização de contatos:", e.message, e.stack);
       await Audit.create({
         who: "system",
         action: "WA_CONTACTS_SYNC_FAIL",
