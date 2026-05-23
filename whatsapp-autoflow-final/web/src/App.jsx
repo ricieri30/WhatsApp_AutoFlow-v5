@@ -1731,7 +1731,10 @@ function ScheduledView({ templates }) {
                 placeholder='Ex: 5511999999999'
               />
             </Field>
-            <Field label='Descrição (opcional)'><input className={inputCls} value={form.name} onChange={e=>setForm(p=>({...p,name:e.target.value}))} placeholder='Ex: Lembrete para João'/></Field>
+            <Field label='Nome do Contato (para {{nome}})'>
+              <input className={inputCls} value={form.contactName} onChange={e=>setForm(p=>({...p,contactName:e.target.value}))} placeholder='Ex: João'/>
+            </Field>
+            <Field label='Descrição (opcional)'><input className={inputCls} value={form.name} onChange={e=>setForm(p=>({...p,name:e.target.value}))} placeholder='Ex: Lembrete de pagamento'/></Field>
             <Field label='Template (opcional)'>
               <select className={selectCls} value={form.templateId} onChange={e=>handleTemplateChange(e.target.value)}>
                 <option value=''>Digitar mensagem manualmente</option>
@@ -2331,7 +2334,7 @@ function PipelineView() {
       {/* Métricas da esteira */}
       <div className='grid grid-cols-3 lg:grid-cols-6 gap-3'>
         {[
-      { key:'onboarding', label:'Boas-vindas', val: metrics.onboarding||0 },
+          { key:'onboarding', label:'Boas-vindas', val: metrics.onboarding||0 },
           { key:'week1',      label:'Semana 1',   val: metrics.week1||0 },
           { key:'week2',      label:'Semana 2',   val: metrics.week2||0 },
           { key:'week3',      label:'Semana 3',   val: metrics.week3||0 },
