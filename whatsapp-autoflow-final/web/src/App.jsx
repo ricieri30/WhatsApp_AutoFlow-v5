@@ -5,7 +5,7 @@ import {
   Smartphone, LogOut, Plus, Search, Copy, RefreshCw,
   Users, Bell, Settings, ChevronRight, Wifi, WifiOff, Loader2,
   X, MessageSquareReply, Phone, UserPlus, Calendar, Clock, ToggleLeft, ToggleRight,
-  Trash2, Pencil, ClipboardCopy
+  Trash2, Pencil, ClipboardCopy, Mic
 } from 'lucide-react'
 
 // ── Constantes ───────────────────────────────────────────────────
@@ -610,7 +610,7 @@ export default function App(){
       {/* Main */}
       <main className='flex-1 overflow-auto'>
 
-        {/* ── DASHBOARD ── */}
+        {/* ── VISÃO GERAL ── */}
         {view==='dashboard' && (
           <div className='p-6 space-y-5'>
             <div className='flex items-center justify-between'>
@@ -2274,7 +2274,7 @@ function PipelineView() {
   }
 
   const STATUS_INFO = {
-    onboarding: { label:'Onboarding', color:'bg-purple-500/20 text-purple-400', dot:'bg-purple-400' },
+    onboarding: { label:'Boas-vindas', color:'bg-purple-500/20 text-purple-400', dot:'bg-purple-400' },
     week1:      { label:'Semana 1',   color:'bg-blue-500/20 text-blue-400',     dot:'bg-blue-400' },
     week2:      { label:'Semana 2',   color:'bg-indigo-500/20 text-indigo-400', dot:'bg-indigo-400' },
     week3:      { label:'Semana 3',   color:'bg-amber-500/20 text-amber-400',   dot:'bg-amber-400' },
@@ -2294,7 +2294,7 @@ function PipelineView() {
       <div className='flex items-center justify-between'>
         <div>
           <h1 className='text-xl font-bold text-white'>Esteira de Produção</h1>
-          <p className='text-sm text-slate-500 mt-0.5'>Onboarding → Semana 1 → 2 → 3 → Dia 30</p>
+          <p className='text-sm text-slate-500 mt-0.5'>Boas-vindas → Semana 1 → 2 → 3 → Dia 30</p>
         </div>
         <div className='flex gap-2'>
           <button onClick={load} className='flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm'>
@@ -2309,7 +2309,7 @@ function PipelineView() {
       {/* Métricas da esteira */}
       <div className='grid grid-cols-3 lg:grid-cols-6 gap-3'>
         {[
-          { key:'onboarding', label:'Onboarding', val: metrics.onboarding||0 },
+      { key:'onboarding', label:'Boas-vindas', val: metrics.onboarding||0 },
           { key:'week1',      label:'Semana 1',   val: metrics.week1||0 },
           { key:'week2',      label:'Semana 2',   val: metrics.week2||0 },
           { key:'week3',      label:'Semana 3',   val: metrics.week3||0 },
@@ -2330,7 +2330,7 @@ function PipelineView() {
 
       {/* Tabs */}
       <div className='flex gap-2 border-b border-slate-800 pb-2'>
-        {[['clients','Clientes'],['config','Mensagens das Semanas'],['onboarding','Onboarding']].map(([k,l]) => (
+        {[['clients','Clientes'],['config','Mensagens das Semanas'],['onboarding','Boas-vindas']].map(([k,l]) => (
           <button key={k} onClick={()=>setTab(k)}
             className={cls('px-4 py-2 rounded-xl text-sm font-medium transition-colors',
               tab===k ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white')}>
@@ -2441,13 +2441,13 @@ function PipelineView() {
         </div>
       )}
 
-      {/* ── ABA ONBOARDING ── */}
+      {/* ── ABA BOAS-VINDAS ── */}
       {tab==='onboarding' && onboardCfg && (
         <div className='space-y-4'>
           {/* Toggle ativo */}
           <div className='flex items-center justify-between bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-3'>
             <div>
-              <div className='text-sm font-medium text-white'>Onboarding ativo</div>
+              <div className='text-sm font-medium text-white'>Boas-vindas ativo</div>
               <div className='text-xs text-slate-500'>Envia automaticamente {onboardCfg.delayMin||30} minutos após cadastrar o cliente na esteira</div>
             </div>
             <button type='button' onClick={()=>setOnboardCfg(p=>({...p,active:!p.active}))}
@@ -2465,7 +2465,13 @@ function PipelineView() {
           {(onboardCfg.steps||[]).sort((a,b)=>a.order-b.order).map((step, i) => (
             <div key={i} className='bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3'>
               <div className='flex items-center justify-between'>
-                <span className='text-sm font-medium text-white'>Passo {step.order}</span>
+                <div className='flex items-center gap-2'>
+                  {step.type === 'audio' && <Mic className='h-4 w-4 text-amber-400' />}
+                  {step.type === 'image' && <Plus className='h-4 w-4 text-emerald-400' />}
+                  {step.type === 'video' && <RefreshCw className='h-4 w-4 text-blue-400' />}
+                  {step.type === 'document' && <FileText className='h-4 w-4 text-slate-400' />}
+                  <span className='text-sm font-medium text-white'>Passo {step.order}</span>
+                </div>
                 <div className='flex items-center gap-2'>
                   <select className={cls(inputCls,'w-36 text-sm py-1')} value={step.type||'text'}
                     onChange={e=>{
@@ -2475,7 +2481,7 @@ function PipelineView() {
                     <option value='text'>Texto</option>
                     <option value='image'>Imagem</option>
                     <option value='video'>Vídeo</option>
-                    <option value='audio'>Áudio</option>
+                    <option value='audio'>Áudio/Voz</option>
                     <option value='document'>Documento</option>
                   </select>
                   <button onClick={()=>{
@@ -2512,7 +2518,7 @@ function PipelineView() {
 
           <button onClick={saveOnboardCfg} disabled={saving}
             className='w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-medium text-sm flex items-center justify-center gap-2'>
-            {saving?<Loader2 className='h-4 w-4 animate-spin'/>:<Bell className='h-4 w-4'/>} Salvar onboarding
+            {saving?<Loader2 className='h-4 w-4 animate-spin'/>:<Bell className='h-4 w-4'/>} Salvar boas-vindas
           </button>
         </div>
       )}
@@ -2520,7 +2526,7 @@ function PipelineView() {
       {/* Modal Adicionar Cliente */}
       <Modal open={addModal} title='Adicionar à Esteira' onClose={()=>setAddModal(false)}>
         <div className='space-y-4 max-w-md'>
-          <p className='text-sm text-slate-400'>O cliente receberá o onboarding em {onboardCfg?.delayMin||30} minutos e depois seguirá a esteira semanal automaticamente.</p>
+          <p className='text-sm text-slate-400'>O cliente receberá as boas-vindas em {onboardCfg?.delayMin||30} minutos e depois seguirá a esteira semanal automaticamente.</p>
           <Field label='WhatsApp *'>
             <PhoneAutocomplete value={addForm.phone} onChange={v=>setAddForm(p=>({...p,phone:v}))} placeholder='Ex: 5511999999999'/>
           </Field>

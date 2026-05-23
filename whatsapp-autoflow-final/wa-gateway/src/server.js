@@ -21,8 +21,9 @@ function addContact(contact) {
   if (!contact.id || contact.id.includes('@g.us')) return; // ignorar grupos
   const phone = normalizePhone(contact.id);
   const existing = contactsMap.get(contact.id) || {};
+  // Priorizar nomes vindos do evento, senão manter o que já temos
   const name = contact.name || contact.notify || contact.verifiedName || existing.name || null;
-  if (!name && existing.name) return; // avoid overwriting name with null
+
   contactsMap.set(contact.id, {
     id: contact.id,
     name,
