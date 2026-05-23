@@ -111,7 +111,7 @@ app.get("/qr", (_req, res) => res.json({ qr: lastQr }));
 // GET /contacts?q=busca&limit=20
 app.get("/contacts", (req, res) => {
   const q = (req.query.q || '').toLowerCase().trim();
-  const limit = Math.min(parseInt(req.query.limit || '50', 10), 200);
+  const limit = Math.min(parseInt(req.query.limit || '50', 10), 10000);
 
   let list = Array.from(contactsMap.values());
 

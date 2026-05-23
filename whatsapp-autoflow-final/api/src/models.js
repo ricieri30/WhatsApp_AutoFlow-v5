@@ -131,6 +131,13 @@ const AuditSchema = new mongoose.Schema({
   ok:     Boolean,
 });
 
+const WAContactSchema = new mongoose.Schema({
+  jid:       { type: String, unique: true, index: true },
+  name:      { type: String, index: true },
+  phone:     { type: String, index: true },
+  updatedAt: { type: Date, default: Date.now },
+});
+
 export const User             = mongoose.model("User",             UserSchema);
 export const Contact          = mongoose.model("Contact",          ContactSchema);
 export const Template         = mongoose.model("Template",         TemplateSchema);
@@ -141,3 +148,4 @@ export const OnboardingConfig = mongoose.model("OnboardingConfig", OnboardingCon
 export const PipelineConfig   = mongoose.model("PipelineConfig",   PipelineConfigSchema);
 export const PipelineContact  = mongoose.model("PipelineContact",  PipelineContactSchema);
 export const Audit            = mongoose.model("Audit",            AuditSchema);
+export const WAContact        = mongoose.model("WAContact",        WAContactSchema);

@@ -12,6 +12,7 @@ const Recurring        = m("Recurring",        {}, "recurrings");
 const Contact          = m("Contact",          {}, "contacts");
 const Template         = m("Template",         {}, "templates");
 const Audit            = m("Audit",            {}, "audits");
+const WAContact        = m("WAContact",        {}, "wacontacts");
 const ScheduledMessage = m("ScheduledMessage", {}, "scheduledmessages");
 const PipelineContact  = m("PipelineContact",  {}, "pipelinecontacts");
 const OnboardingConfig = m("OnboardingConfig", {}, "onboardingconfigs");
@@ -226,7 +227,47 @@ new Worker("wa-scheduler", async (job) => {
     return;
   }
 
-  // ── 5. Recorrência ────────────────────────────────────────────
+  // ── 5. Sincronização de contatos ──────────────────────────────
+  if (job.name === "whatsapp-sync-contacts") {
+    console.log("🔄 Iniciando sincronização de contatos do WhatsApp...");
+    try {
+      const r = await fetch(`${process.env.WA_GATEWAY_URL}/contacts?limit=10000`);
+      if (!r.ok) throw new Error(`Gateway returned ${r.status}`);
+      const contacts = await r.json();
+
+      let updated = 0;
+      for (const c of contacts) {
+        // Usar model diretamente em vez de m(...) se quisermos ser precisos com os campos
+        await WAContact.findOneAndUpdate(
+          { jid: c.id },
+          { jid: c.id, name: c.name || "", phone: c.phone, updatedAt: new Date() },
+          { upsert: true }
+        );
+        updated++;
+      }
+
+      await Audit.create({
+        who: "system",
+        action: "WA_CONTACTS_SYNC_DONE",
+        entity: "system",
+        detail: `Sincronizados ${updated} contatos`,
+        ok: true
+      });
+      console.log(`✅ Sincronização concluída: ${updated} contatos.`);
+    } catch (e) {
+      console.error("❌ Falha na sincronização de contatos:", e.message);
+      await Audit.create({
+        who: "system",
+        action: "WA_CONTACTS_SYNC_FAIL",
+        entity: "system",
+        detail: e.message,
+        ok: false
+      });
+    }
+    return;
+  }
+
+  // ── 6. Recorrência ────────────────────────────────────────────
   const { recurringId } = job.data;
   const rec = await Recurring.findById(recurringId);
   if (!rec || !rec.enabled) return;

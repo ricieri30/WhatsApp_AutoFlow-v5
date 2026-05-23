@@ -5,7 +5,7 @@ import cronParser from "cron-parser";
 
 import { auth } from "./auth.js";
 import { User, Contact, Template, Recurring, ScheduledMessage, AutoReply,
-         OnboardingConfig, PipelineConfig, PipelineContact, Audit } from "./models.js";
+         OnboardingConfig, PipelineConfig, PipelineContact, Audit, WAContact } from "./models.js";
 import { makeQueue, upsertRecurringScheduler, removeRecurringScheduler } from "./scheduler.js";
 
 const router = express.Router();
@@ -26,7 +26,13 @@ async function scheduleSubscriptionCheck() {
       { pattern: "5 8 * * *", tz: "America/Sao_Paulo" },
       { name: "pipeline-weekly-check", data: {}, opts: { attempts: 3, removeOnComplete: 7, removeOnFail: 7 } }
     );
-    console.log("✅ Jobs diários agendados (08:00 e 08:05 BRT)");
+    // Job de sincronização de contatos a cada 6 horas
+    await queue.upsertJobScheduler(
+      "whatsapp-sync-contacts",
+      { pattern: "0 */6 * * *", tz: "America/Sao_Paulo" },
+      { name: "whatsapp-sync-contacts", data: {}, opts: { attempts: 3, removeOnComplete: 7, removeOnFail: 7 } }
+    );
+    console.log("✅ Jobs diários e de sincronização agendados");
   } catch (e) {
     console.warn("⚠️  Não foi possível agendar jobs diários:", e.message);
   }
@@ -93,13 +99,34 @@ router.get("/whatsapp/qr", auth, async (_req, res) => {
 // GET /whatsapp/contacts?q=busca&limit=50
 router.get("/whatsapp/contacts", auth, async (req, res) => {
   try {
-    const params = new URLSearchParams();
-    if (req.query.q)     params.set('q', req.query.q);
-    if (req.query.limit) params.set('limit', req.query.limit);
-    const r = await fetch(`${process.env.WA_GATEWAY_URL}/contacts?${params}`);
-    res.status(r.status).json(await r.json());
-  } catch {
+    const q = (req.query.q || "").toLowerCase().trim();
+    const limit = Math.min(parseInt(req.query.limit || "50", 10), 200);
+
+    const filter = q ? {
+      $or: [
+        { name: { $regex: q, $options: "i" } },
+        { phone: { $regex: q, $options: "i" } }
+      ]
+    } : {};
+
+    const list = await WAContact.find(filter)
+      .sort({ name: 1, phone: 1 })
+      .limit(limit);
+
+    res.json(list);
+  } catch (e) {
+    console.error("[API] Erro ao buscar contatos locais:", e.message);
     res.json([]);
+  }
+});
+
+router.post("/whatsapp/sync", auth, async (req, res) => {
+  try {
+    await queue.add("whatsapp-sync-contacts", {});
+    await Audit.create({ who: req.user.email, action: "WA_CONTACTS_SYNC_START", detail: "Sincronização manual iniciada", ok: true });
+    res.json({ ok: true, message: "Sincronização iniciada em segundo plano" });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
 

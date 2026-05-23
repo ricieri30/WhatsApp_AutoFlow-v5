@@ -80,11 +80,11 @@ function PhoneAutocomplete({ value, onChange, onSelect, placeholder = 'Ex: 55119
         )}
       </div>
 
-      {open && suggestions.length > 0 && (
+      {open && (suggestions.length > 0 || loading) && (
         <div className='absolute z-50 left-0 right-0 mt-1 bg-slate-800 border border-slate-600 rounded-xl shadow-xl overflow-hidden'>
           {suggestions.map(c => (
             <button
-              key={c.id}
+              key={c._id || c.id || c.jid}
               type='button'
               onMouseDown={() => pick(c)}
               className='w-full flex items-center gap-3 px-3 py-2.5 hover:bg-slate-700 transition-colors text-left'
@@ -98,8 +98,11 @@ function PhoneAutocomplete({ value, onChange, onSelect, placeholder = 'Ex: 55119
               </div>
             </button>
           ))}
-          <div className='px-3 py-2 border-t border-slate-700 text-xs text-slate-500'>
-            Contatos do WhatsApp conectado
+          {suggestions.length === 0 && !loading && (
+            <div className='px-4 py-3 text-sm text-slate-500 italic'>Nenhum contato encontrado no banco local</div>
+          )}
+          <div className='px-3 py-2 border-t border-slate-700 text-xs text-slate-500 flex justify-between items-center'>
+            <span>Banco de contatos sincronizado</span>
           </div>
         </div>
       )}
@@ -508,6 +511,13 @@ export default function App(){
     setRefreshing(false)
   }
 
+  async function syncWAContacts() {
+    try {
+      await api('whatsapp/sync', { method: 'POST' })
+      showToast('Sincronização iniciada! Os contatos aparecerão em alguns instantes.', 'indigo')
+    } catch(e) { showToast('Erro ao sincronizar: ' + e.message, 'red') }
+  }
+
   async function pauseResume(item){
     if(item.enabled) await api(`recurring/${item._id}/pause`,{method:'POST'})
     else await api(`recurring/${item._id}/resume`,{method:'POST'})
@@ -617,6 +627,9 @@ export default function App(){
             <div className='flex items-center justify-between'>
               <h1 className='text-xl font-bold text-white'>Visão Geral</h1>
               <div className='flex gap-2'>
+                <button onClick={syncWAContacts} className='flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-800 hover:bg-indigo-600/20 hover:text-indigo-400 text-slate-300 text-sm transition-colors border border-slate-700'>
+                  <RefreshCw className='h-4 w-4'/> Sincronizar Contatos
+                </button>
                 <button onClick={handleRefresh} className='flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm transition-colors'>
                   <RefreshCw className={cls('h-4 w-4', refreshing && 'animate-spin')}/> Atualizar
                 </button>
@@ -1843,6 +1856,7 @@ function ClientsView() {
     try { const d = await api('contacts'); setContacts(d) } catch {}
   }
 
+
   useEffect(() => { load() }, [])
 
   // Calcular etapa de cada contato
@@ -1969,6 +1983,10 @@ function ClientsView() {
           <p className='text-sm text-slate-500 mt-0.5'>{contacts.length} cliente{contacts.length!==1?'s':''} cadastrado{contacts.length!==1?'s':''}</p>
         </div>
         <div className='flex gap-2'>
+          <button onClick={syncWAContacts}
+            className='flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-800 hover:bg-indigo-600/20 hover:text-indigo-400 text-slate-300 text-sm transition-colors border border-slate-700'>
+            <RefreshCw className='h-4 w-4'/> Sincronizar WhatsApp
+          </button>
           <button onClick={()=>setNotifModal(true)}
             className='flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm transition-colors'>
             <Bell className='h-4 w-4'/> Textos de Aviso
