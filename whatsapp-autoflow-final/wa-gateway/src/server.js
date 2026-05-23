@@ -18,20 +18,33 @@ function normalizePhone(jid = '') {
 }
 
 function addContact(contact) {
-  if (!contact.id || contact.id.includes('@g.us') || contact.id.includes('@broadcast')) return; // ignorar grupos e transmissões
+  if (!contact.id || typeof contact.id !== 'string') return;
+  if (contact.id.includes('@g.us') || contact.id.includes('@broadcast') || contact.id.includes('@call') || contact.id.includes('@newsletter')) return;
+
   const phone = normalizePhone(contact.id);
+  if (!phone) return;
+
   const existing = contactsMap.get(contact.id) || {};
-  // Priorizar nomes vindos do evento, senão manter o que já temos
+
+  // Lógica de prioridade de nomes
   const name = contact.name || contact.notify || contact.verifiedName || existing.name || null;
 
-  contactsMap.set(contact.id, {
-    id: contact.id,
-    name,
-    phone,
-  });
+  // Só atualiza se o nome mudou ou se não existia
+  if (existing.name !== name || !contactsMap.has(contact.id)) {
+    contactsMap.set(contact.id, {
+      id: contact.id,
+      name,
+      phone,
+    });
 
-  if (contactsMap.size % 100 === 0) {
-    console.log(`[Gateway] contactsMap size: ${contactsMap.size}`);
+    // Log apenas para novos contatos com nome ou grandes volumes
+    if (!existing.id && name) {
+      console.log(`[Gateway] Novo contato: ${name} (${phone})`);
+    }
+  }
+
+  if (contactsMap.size > 0 && contactsMap.size % 500 === 0 && !existing.id) {
+    console.log(`[Gateway] contatos em memória: ${contactsMap.size}`);
   }
 }
 
@@ -116,6 +129,13 @@ await start();
 // ── Rotas ────────────────────────────────────────────────────────
 app.get("/status", (_req, res) => res.json({ status }));
 app.get("/qr", (_req, res) => res.json({ qr: lastQr }));
+
+app.get("/debug/contacts", (_req, res) => {
+  res.json({
+    count: contactsMap.size,
+    sample: Array.from(contactsMap.values()).slice(0, 5)
+  });
+});
 
 // GET /contacts?q=busca&limit=20
 app.get("/contacts", (req, res) => {

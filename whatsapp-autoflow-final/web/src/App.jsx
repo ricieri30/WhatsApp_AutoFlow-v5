@@ -425,7 +425,7 @@ export default function App(){
   const [user,setUser]       = useState(null)
   const [checking,setChecking] = useState(true)  // validando token
   const [view,setView]       = useState('dashboard')
-  const [dashboard,setDashboard] = useState({recurringActive:0,contacts:0,templates:0})
+  const [dashboard,setDashboard] = useState({recurringActive:0,contacts:0,templates:0,lastSync:null})
   const [recurring,setRecurring] = useState([])
   const [templates,setTemplates] = useState([])
   const [audit,setAudit]     = useState([])
@@ -625,7 +625,15 @@ export default function App(){
         {view==='dashboard' && (
           <div className='p-6 space-y-5'>
             <div className='flex items-center justify-between'>
-              <h1 className='text-xl font-bold text-white'>Visão Geral</h1>
+              <div>
+                <h1 className='text-xl font-bold text-white'>Visão Geral</h1>
+                {dashboard.lastSync && (
+                  <div className='text-xs text-slate-500 mt-0.5 flex items-center gap-1'>
+                    <span className='w-1 h-1 rounded-full bg-emerald-500'/>
+                    Última sincronização de contatos: {new Date(dashboard.lastSync).toLocaleString('pt-BR')}
+                  </div>
+                )}
+              </div>
               <div className='flex gap-2'>
                 <button onClick={syncWAContacts} className='flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-800 hover:bg-indigo-600/20 hover:text-indigo-400 text-slate-300 text-sm transition-colors border border-slate-700'>
                   <RefreshCw className='h-4 w-4'/> Sincronizar Contatos

@@ -234,35 +234,62 @@ new Worker("wa-scheduler", async (job) => {
 
   // ── 5. Sincronização de contatos ──────────────────────────────
   if (job.name === "whatsapp-sync-contacts") {
-    console.log("🔄 Iniciando sincronização de contatos do WhatsApp...");
+    console.log("🔄 [Sync] Iniciando sincronização de contatos...");
+    const start = Date.now();
     try {
-      const r = await fetch(`${process.env.WA_GATEWAY_URL}/contacts?limit=10000`);
-      if (!r.ok) throw new Error(`Gateway returned ${r.status}`);
+      const url = `${process.env.WA_GATEWAY_URL}/contacts?limit=10000`;
+      const r = await fetch(url);
+      if (!r.ok) throw new Error(`Gateway returned ${r.status} for ${url}`);
+
       const contacts = await r.json();
-      console.log(`[Worker] Recebidos ${contacts.length} contatos do gateway.`);
+      if (!Array.isArray(contacts)) throw new Error(`Gateway returned non-array: ${typeof contacts}`);
+
+      console.log(`[Sync] Gateway retornou ${contacts.length} contatos.`);
+
+      if (contacts.length === 0) {
+        await Audit.create({
+          who: "system", action: "WA_CONTACTS_SYNC_EMPTY",
+          entity: "system", detail: "Gateway retornou 0 contatos. Verifique a conexão do WhatsApp.", ok: true
+        });
+        return;
+      }
 
       let updated = 0;
       for (const c of contacts) {
-        // Usar model diretamente em vez de m(...) se quisermos ser precisos com os campos
+        if (!c.id) continue;
+
         await WAContact.findOneAndUpdate(
           { jid: c.id },
-          { jid: c.id, name: c.name || "", phone: c.phone, updatedAt: new Date() },
-          { upsert: true }
+          {
+            jid: c.id,
+            name: c.name || "",
+            phone: c.phone || c.id.split('@')[0],
+            updatedAt: new Date()
+          },
+          { upsert: true, new: true }
         );
+
+        // Tentar enriquecer contatos da gestão (Contact model) se eles não tiverem nome
+        if (c.name) {
+          const phone = c.phone || c.id.split('@')[0];
+          await Contact.updateMany(
+            { phoneE164: phone, $or: [{ name: "" }, { name: null }] },
+            { $set: { name: c.name } }
+          );
+        }
+
         updated++;
-        if (updated % 100 === 0) {
-          console.log(`[Worker] Sincronizados ${updated}/${contacts.length} contatos...`);
+        if (updated % 200 === 0) {
+          console.log(`[Sync] Progresso: ${updated}/${contacts.length}...`);
         }
       }
 
+      const duration = ((Date.now() - start) / 1000).toFixed(1);
       await Audit.create({
-        who: "system",
-        action: "WA_CONTACTS_SYNC_DONE",
-        entity: "system",
-        detail: `Sincronizados ${updated} contatos`,
-        ok: true
+        who: "system", action: "WA_CONTACTS_SYNC_DONE",
+        entity: "system", detail: `Sincronizados ${updated} contatos em ${duration}s`, ok: true
       });
-      console.log(`✅ Sincronização concluída: ${updated} contatos.`);
+      console.log(`✅ [Sync] Concluída: ${updated} contatos em ${duration}s.`);
     } catch (e) {
       console.error("❌ Falha na sincronização de contatos:", e.message);
       await Audit.create({

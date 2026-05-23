@@ -82,6 +82,7 @@ router.get("/dashboard", auth, async (_req, res) => {
     recentAudit,
     upcoming: upcoming.slice(0, 5),
     pipelineActive,
+    lastSync: await WAContact.findOne().sort({ updatedAt: -1 }).then(c => c?.updatedAt || null),
   });
 });
 
@@ -125,6 +126,24 @@ router.post("/whatsapp/sync", auth, async (req, res) => {
     await queue.add("whatsapp-sync-contacts", {});
     await Audit.create({ who: req.user.email, action: "WA_CONTACTS_SYNC_START", detail: "Sincronização manual iniciada", ok: true });
     res.json({ ok: true, message: "Sincronização iniciada em segundo plano" });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.get("/whatsapp/diagnostics", auth, async (_req, res) => {
+  try {
+    const total = await WAContact.countDocuments({});
+    const withName = await WAContact.countDocuments({ name: { $ne: "" } });
+    const last = await WAContact.findOne().sort({ updatedAt: -1 });
+    const gwStatus = await fetch(`${process.env.WA_GATEWAY_URL}/debug/contacts`).then(r => r.json()).catch(e => ({ error: e.message }));
+
+    res.json({
+      mongo_contacts_total: total,
+      mongo_contacts_with_name: withName,
+      mongo_last_update: last ? last.updatedAt : null,
+      gateway_stats: gwStatus
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
