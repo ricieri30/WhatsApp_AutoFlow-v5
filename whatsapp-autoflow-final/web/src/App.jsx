@@ -24,7 +24,7 @@ function cls(...c){ return c.filter(Boolean).join(' ') }
 // PhoneAutocomplete — lógica simples: digita → API → mostra
 // Baseado na versão que funcionava corretamente
 // ══════════════════════════════════════════════════════════════════
-function PhoneAutocomplete({ value, onChange, placeholder = 'Ex: 5511999999999', className }) {
+function PhoneAutocomplete({ value, onChange, onSelect, placeholder = 'Ex: 5511999999999', className }) {
   const [suggestions, setSuggestions] = useState([])
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -59,6 +59,7 @@ function PhoneAutocomplete({ value, onChange, placeholder = 'Ex: 5511999999999',
 
   function pick(contact) {
     onChange(contact.phone)
+    if (onSelect) onSelect(contact)
     setSuggestions([])
     setOpen(false)
   }
@@ -1718,7 +1719,18 @@ function ScheduledView({ templates }) {
       <Modal open={modalOpen} title='Novo Agendamento' onClose={()=>setModalOpen(false)}>
         <div className='grid grid-cols-1 lg:grid-cols-2 gap-5 max-w-3xl'>
           <div className='space-y-4'>
-            <Field label='Destinatário *'><PhoneAutocomplete value={form.phone} onChange={v=>setForm(p=>({...p,phone:v}))} placeholder='Ex: 5511999999999'/></Field>
+            <Field label='Destinatário *'>
+              <PhoneAutocomplete
+                value={form.phone}
+                onChange={v=>setForm(p=>({...p,phone:v}))}
+                onSelect={c => {
+                  if (!form.contactName && c.name) {
+                    setForm(p => ({ ...p, contactName: c.name }))
+                  }
+                }}
+                placeholder='Ex: 5511999999999'
+              />
+            </Field>
             <Field label='Descrição (opcional)'><input className={inputCls} value={form.name} onChange={e=>setForm(p=>({...p,name:e.target.value}))} placeholder='Ex: Lembrete para João'/></Field>
             <Field label='Template (opcional)'>
               <select className={selectCls} value={form.templateId} onChange={e=>handleTemplateChange(e.target.value)}>
@@ -2054,7 +2066,17 @@ function ClientsView() {
       <Modal open={modalOpen} title={editTarget ? 'Editar Cliente' : 'Adicionar Novo Cliente'} onClose={()=>setModalOpen(false)}>
         <div className='space-y-4 max-w-md'>
           <Field label='Número de WhatsApp *'>
-            <PhoneAutocomplete value={form.phone} onChange={v=>setForm(p=>({...p,phone:v}))} placeholder='Ex: 5511999999999'/>
+            <PhoneAutocomplete
+              value={form.phone}
+              onChange={v=>setForm(p=>({...p,phone:v}))}
+              onSelect={c => {
+                if (!form.name && c.name) {
+                  const firstName = c.name.split(' ')[0]
+                  setForm(p => ({ ...p, name: firstName }))
+                }
+              }}
+              placeholder='Ex: 5511999999999'
+            />
             <p className='text-xs text-slate-500 mt-1'>Digite ou selecione um contato do WhatsApp conectado</p>
           </Field>
           <Field label='Nome (opcional)'>
@@ -2528,7 +2550,17 @@ function PipelineView() {
         <div className='space-y-4 max-w-md'>
           <p className='text-sm text-slate-400'>O cliente receberá as boas-vindas em {onboardCfg?.delayMin||30} minutos e depois seguirá a esteira semanal automaticamente.</p>
           <Field label='WhatsApp *'>
-            <PhoneAutocomplete value={addForm.phone} onChange={v=>setAddForm(p=>({...p,phone:v}))} placeholder='Ex: 5511999999999'/>
+            <PhoneAutocomplete
+              value={addForm.phone}
+              onChange={v=>setAddForm(p=>({...p,phone:v}))}
+              onSelect={c => {
+                if (!addForm.name && c.name) {
+                  const firstName = c.name.split(' ')[0]
+                  setAddForm(p => ({ ...p, name: firstName }))
+                }
+              }}
+              placeholder='Ex: 5511999999999'
+            />
           </Field>
           <Field label='Nome'>
             <input className={inputCls} value={addForm.name} onChange={e=>setAddForm(p=>({...p,name:e.target.value}))} placeholder='Nome do cliente'/>
