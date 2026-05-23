@@ -22,6 +22,7 @@ function addContact(contact) {
   const phone = normalizePhone(contact.id);
   const existing = contactsMap.get(contact.id) || {};
   const name = contact.name || contact.notify || contact.verifiedName || existing.name || null;
+  if (!name && existing.name) return; // avoid overwriting name with null
   contactsMap.set(contact.id, {
     id: contact.id,
     name,
@@ -147,6 +148,7 @@ app.post("/send-media", async (req, res) => {
   const msgMap = {
     image:    { image:    { url }, caption: caption || "" },
     video:    { video:    { url }, caption: caption || "" },
+    audio:    { audio:    { url }, ptt: true },
     document: { document: { url }, fileName: caption || "arquivo" },
   };
   await sock.sendMessage(jid, msgMap[type] || msgMap.image);

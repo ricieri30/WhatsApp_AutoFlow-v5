@@ -575,7 +575,7 @@ export default function App(){
         <nav className='flex-1 p-3 space-y-1'>
           <SidebarItem icon={LayoutDashboard} label='Visão Geral'  active={view==='dashboard'} onClick={()=>setView('dashboard')}/>
           <SidebarItem icon={Users}           label='Clientes'     active={view==='contacts'}  onClick={()=>setView('contacts')}/>
-          <SidebarItem icon={CalendarClock}   label='Esteira'      active={view==='pipeline'}  onClick={()=>setView('pipeline')}/>
+          <SidebarItem icon={CalendarClock}   label='Esteira'      active={view==='pipeline'}  onClick={()=>setView('pipeline')} badge={dashboard.pipelineActive||null}/>
           <SidebarItem icon={Bell}            label='Automações'   active={view==='recurring'} onClick={()=>setView('recurring')} badge={dashboard.recurringActive||null}/>
           <SidebarItem icon={MessageSquareReply} label='Respostas Auto' active={view==='autoReply'} onClick={()=>setView('autoReply')}/>
           <SidebarItem icon={CalendarClock}   label='Agendamentos' active={view==='templates'} onClick={()=>setView('templates')}/>
@@ -1806,17 +1806,20 @@ function ClientsView() {
 
   // Mensagens de notificação editáveis (localStorage para simplicidade)
   const [notifTexts, setNotifTexts] = useState(() => {
-    try {
-      const saved = localStorage.getItem('autoflow_notif_texts');
-      if (saved) return JSON.parse(saved);
-    } catch {}
-    return {
+    const defaultTexts = {
       msg7d: 'Olá {{nome}}! Sua assinatura vence em 7 dias. Deseja renovar?',
       msgToday: 'Olá {{nome}}! Sua assinatura expira hoje. Entre em contato para renovar.',
     };
+    try {
+      const saved = localStorage.getItem('autoflow_notif_texts');
+      return saved ? { ...defaultTexts, ...JSON.parse(saved) } : defaultTexts;
+    } catch {
+      return defaultTexts;
+    }
   });
 
   const [notifForm, setNotifForm] = useState(notifTexts);
+  useEffect(() => { setNotifForm(notifTexts) }, [notifTexts]);
 
   const emptyForm = { phone: '', name: '', tags: '', startDate: '', endDate: '' }
   const [form, setForm] = useState(emptyForm)
@@ -2472,6 +2475,7 @@ function PipelineView() {
                     <option value='text'>Texto</option>
                     <option value='image'>Imagem</option>
                     <option value='video'>Vídeo</option>
+                    <option value='audio'>Áudio</option>
                     <option value='document'>Documento</option>
                   </select>
                   <button onClick={()=>{
