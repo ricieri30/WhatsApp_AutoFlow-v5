@@ -19,14 +19,10 @@ Sistema profissional de automação WhatsApp com interface administrativa modern
 - ✅ Agendamentos pontuais (data e hora específica)
 - ✅ Respostas automáticas por palavra-chave
 - ✅ Templates de mensagem reutilizáveis
-- ✅ Busca de contatos do WhatsApp conectado (com cache local robusto)
-- ✅ Enriquecimento automático de nomes de contatos
-- ✅ Suporte a mensagens de áudio (Voz/PTT) na esteira
+- ✅ Busca de contatos do WhatsApp conectado
 - ✅ Notificações automáticas de vencimento
-- ✅ Esteira de Onboarding (Boas-vindas) configurável
-- ✅ Interface 100% em Português (PT-BR)
 - ✅ Auditoria completa de ações
-- ✅ Dashboard com métricas em tempo real e status de sincronização
+- ✅ Dashboard com métricas em tempo real
 
 ## Deploy rápido
 
@@ -77,27 +73,19 @@ autoflow/
 | `NOTICE_1D` | Mensagem aviso 1 dia antes | *configurável* |
 | `NOTICE_TODAY` | Mensagem aviso no dia | *configurável* |
 
-## Diagnóstico e Observabilidade
-
-O sistema conta com ferramentas avançadas para monitorar a sincronização:
-
-- **Dashboard:** Exibe o horário da última sincronização e o total de contatos em cache.
-- **API Diagnostics:** Endpoint `/api/whatsapp/diagnostics` (requer Token) retorna o estado detalhado do cache vs gateway.
-- **Gateway Debug:** Endpoint `/debug/contacts` no gateway (porta 3333) mostra o mapa de contatos em memória.
-
-### Comandos úteis
+## Diagnóstico rápido
 
 ```bash
 # Ver status dos containers
 docker compose ps
 
-# Logs da sincronização (Worker)
-docker logs autoflow2_worker -f | grep Sync
-
-# Logs do gateway (Eventos Baileys)
+# Logs do gateway (contatos WhatsApp)
 docker logs autoflow2_gateway -f
 
-# Testar busca de contatos (Local Cache)
+# Logs da API
+docker logs autoflow2_api -f
+
+# Testar contatos (após logar e pegar token)
 curl http://localhost:3025/api/whatsapp/contacts?q=silva \
   -H "Authorization: Bearer SEU_TOKEN"
 ```

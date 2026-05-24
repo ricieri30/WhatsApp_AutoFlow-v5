@@ -237,7 +237,7 @@ new Worker("wa-scheduler", async (job) => {
     console.log("🔄 [Sync] Iniciando sincronização de contatos...");
     const start = Date.now();
     try {
-      const url = `${process.env.WA_GATEWAY_URL}/contacts?limit=10000`;
+      const url = `${process.env.WA_GATEWAY_URL}/contacts?limit=50000`;
       const r = await fetch(url);
       if (!r.ok) throw new Error(`Gateway returned ${r.status} for ${url}`);
 
@@ -254,44 +254,47 @@ new Worker("wa-scheduler", async (job) => {
         return;
       }
 
-      let updated = 0;
-      for (const c of contacts) {
-        if (!c.id) continue;
-
-        await WAContact.findOneAndUpdate(
-          { jid: c.id },
-          {
+      // Preparar operações em lote para WAContact
+      const waOps = contacts.filter(c => c.id).map(c => ({
+        updateOne: {
+          filter: { jid: c.id },
+          update: {
             jid: c.id,
             name: c.name || "",
             phone: c.phone || c.id.split('@')[0],
             updatedAt: new Date()
           },
-          { upsert: true, new: true }
-        );
-
-        // Tentar enriquecer contatos da gestão (Contact model) se eles não tiverem nome
-        if (c.name) {
-          const phone = c.phone || c.id.split('@')[0];
-          await Contact.updateMany(
-            { phoneE164: phone, $or: [{ name: "" }, { name: null }] },
-            { $set: { name: c.name } }
-          );
+          upsert: true
         }
+      }));
 
-        updated++;
-        if (updated % 200 === 0) {
-          console.log(`[Sync] Progresso: ${updated}/${contacts.length}...`);
+      if (waOps.length > 0) {
+        await WAContact.bulkWrite(waOps);
+      }
+
+      // Enriquecimento de contatos da gestão (lote tbm)
+      const enrichOps = contacts.filter(c => c.name).map(c => ({
+        updateMany: {
+          filter: {
+            phoneE164: c.phone || c.id.split('@')[0],
+            $or: [{ name: "" }, { name: null }]
+          },
+          update: { $set: { name: c.name } }
         }
+      }));
+
+      if (enrichOps.length > 0) {
+        await Contact.bulkWrite(enrichOps);
       }
 
       const duration = ((Date.now() - start) / 1000).toFixed(1);
       await Audit.create({
         who: "system", action: "WA_CONTACTS_SYNC_DONE",
-        entity: "system", detail: `Sincronizados ${updated} contatos em ${duration}s`, ok: true
+        entity: "system", detail: `Sincronizados ${contacts.length} contatos em ${duration}s`, ok: true
       });
-      console.log(`✅ [Sync] Concluída: ${updated} contatos em ${duration}s.`);
+      console.log(`✅ [Sync] Concluída: ${contacts.length} contatos em ${duration}s.`);
     } catch (e) {
-      console.error("❌ [Sync] Falha crítica na sincronização de contatos:", e.message, e.stack);
+      console.error("❌ Falha na sincronização de contatos:", e.message);
       await Audit.create({
         who: "system",
         action: "WA_CONTACTS_SYNC_FAIL",

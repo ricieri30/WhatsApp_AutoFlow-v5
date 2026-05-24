@@ -42,14 +42,12 @@ function PhoneAutocomplete({ value, onChange, onSelect, placeholder = 'Ex: 55119
 
   async function fetchSuggestions(q) {
     setLoading(true)
-    setOpen(true)
     try {
       const data = await api(`whatsapp/contacts?q=${encodeURIComponent(q)}&limit=8`)
       setSuggestions(Array.isArray(data) ? data : [])
-    } catch(e) {
-      console.error('[PhoneAutocomplete] Error:', e.message)
-      setSuggestions([])
-    } finally { setLoading(false) }
+      setOpen(true)
+    } catch { setSuggestions([]) }
+    finally { setLoading(false) }
   }
 
   function handleInput(e) {
@@ -82,7 +80,7 @@ function PhoneAutocomplete({ value, onChange, onSelect, placeholder = 'Ex: 55119
         )}
       </div>
 
-      {open && (
+      {open && (suggestions.length > 0 || loading) && (
         <div className='absolute z-50 left-0 right-0 mt-1 bg-slate-800 border border-slate-600 rounded-xl shadow-xl overflow-hidden'>
           {suggestions.map(c => (
             <button
@@ -427,10 +425,10 @@ export default function App(){
   const [user,setUser]       = useState(null)
   const [checking,setChecking] = useState(true)  // validando token
   const [view,setView]       = useState('dashboard')
-  const [dashboard,setDashboard] = useState({recurringActive:0,contacts:0,templates:0,lastSync:null,cachedContactsCount:0})
-  const [recurring,setRecurring] = useState([])
-  const [templates,setTemplates] = useState([])
-  const [audit,setAudit]     = useState([])
+  const [dashboard,setDashboard] = useState({recurringActive:0,contacts:0,templates:0,lastSync:null})
+  const [recurring,setRecurring] = useState(null)
+  const [templates,setTemplates] = useState(null)
+  const [audit,setAudit]     = useState(null)
   const [whats,setWhats]     = useState({status:'starting',qr:null})
   const [q,setQ]             = useState('')
   const [createOpen,setCreateOpen] = useState(false)
@@ -453,25 +451,25 @@ export default function App(){
   const builtCron = useMemo(()=>buildCron(draft),[draft])
 
   const filteredRecurring = useMemo(()=>{
+    if (!recurring) return []
     const s=q.trim().toLowerCase(); if(!s) return recurring
     return recurring.filter(r=>[r.name,r.pattern,r.tz,r.targetType,r.targetValue].join(' ').toLowerCase().includes(s))
   },[recurring,q])
 
   const loadAll = useCallback(async ()=>{
-    try {
-      const [dash,rec,tpl,aud]=await Promise.all([
-        api('dashboard'), api('recurring'), api('templates'), api('audit')
-      ])
-      setDashboard(dash); setRecurring(rec); setTemplates(tpl); setAudit(aud)
-    } catch(e) {
+    const handleErr = e => {
       if (String(e.message).includes('401') || String(e.message).includes('unauthorized') || String(e.message).includes('invalid_token')) {
         clearToken(); setUser(null)
       }
     }
-    try{
-      const [st,qr]=await Promise.all([api('whatsapp/status'), api('whatsapp/qr')])
-      setWhats({status:st.status, qr:qr.qr})
-    }catch{}
+    // Carregamento incremental para melhor performance percebida
+    api('dashboard').then(setDashboard).catch(handleErr)
+    api('recurring').then(setRecurring).catch(handleErr)
+    api('templates').then(setTemplates).catch(handleErr)
+    api('audit').then(setAudit).catch(handleErr)
+
+    api('whatsapp/status').then(st => setWhats(prev => ({ ...prev, status: st.status }))).catch(() => {})
+    api('whatsapp/qr').then(qr => setWhats(prev => ({ ...prev, qr: qr.qr }))).catch(() => {})
   },[])
 
   // Auth SÍNCRONA — sem async no startup, sem flicker
@@ -630,15 +628,9 @@ export default function App(){
               <div>
                 <h1 className='text-xl font-bold text-white'>Visão Geral</h1>
                 {dashboard.lastSync && (
-                  <div className='text-xs text-slate-500 mt-0.5 flex flex-col gap-0.5'>
-                    <div className='flex items-center gap-1.5'>
-                      <span className='w-1.5 h-1.5 rounded-full bg-emerald-500'/>
-                      <span>Última sincronização: {new Date(dashboard.lastSync).toLocaleString('pt-BR')}</span>
-                    </div>
-                    <div className='flex items-center gap-1.5'>
-                      <span className='w-1.5 h-1.5 rounded-full bg-indigo-500'/>
-                      <span>{dashboard.cachedContactsCount || 0} contatos no banco local</span>
-                    </div>
+                  <div className='text-xs text-slate-500 mt-0.5 flex items-center gap-1'>
+                    <span className='w-1 h-1 rounded-full bg-emerald-500'/>
+                    Última sincronização de contatos: {new Date(dashboard.lastSync).toLocaleString('pt-BR')}
                   </div>
                 )}
               </div>
@@ -833,6 +825,9 @@ export default function App(){
         {/* ── AUTOMAÇÕES (RECURRING) ── */}
         {view==='recurring' && (
           <div className='p-6 space-y-5'>
+            {!recurring && <div className='py-10 text-center text-slate-500 text-sm'>Carregando automações...</div>}
+            {recurring && (
+              <>
             <div className='flex items-center justify-between gap-3'>
               <div>
                 <h1 className='text-xl font-bold text-white'>Automações</h1>
@@ -893,7 +888,8 @@ export default function App(){
                   </div>
                 </div>
               ))}
-            </div>
+            </>
+            )}
           </div>
         )}
 
@@ -903,6 +899,9 @@ export default function App(){
         {/* ── AUDITORIA ── */}
         {view==='audit' && (
           <div className='p-6 space-y-5'>
+            {!audit && <div className='py-10 text-center text-slate-500 text-sm'>Carregando auditoria...</div>}
+            {audit && (
+              <>
             <div>
               <h1 className='text-xl font-bold text-white'>Auditoria</h1>
               <p className='text-sm text-slate-500 mt-0.5'>Histórico de eventos do sistema</p>
@@ -919,11 +918,12 @@ export default function App(){
                   <Pill tone={x.ok?'green':'red'}>{x.ok?'OK':'ERRO'}</Pill>
                 </div>
               ))}
-            </div>
+            </>
+            )}
           </div>
         )}
 
-        {view==='contacts'  && <ClientsView />}
+        {view==='contacts'  && <ClientsView syncWAContacts={syncWAContacts} />}
         {view==='pipeline'  && <PipelineView />}
         {view==='autoReply' && <AutoReplyView />}
         {view==='templates' && <ScheduledView templates={templates}/> }
@@ -945,7 +945,7 @@ export default function App(){
                 <Field label='Template'>
                   <select className={selectCls} value={draft.templateId} onChange={e=>setDraft(p=>({...p,templateId:e.target.value}))}>
                     <option value=''>Selecione...</option>
-                    {templates.map(t=><option key={t._id} value={t._id}>{t.name}</option>)}
+                    {templates?.map(t=><option key={t._id} value={t._id}>{t.name}</option>)}
                   </select>
                 </Field>
                 <Field label='Tipo de alvo'>
@@ -1451,6 +1451,7 @@ function AutoReplyView() {
 }
 // ══════════════════════════════════════════════════════════════════
 function TemplatesView({ templates, onReload, showToast }) {
+  if (!templates) return <div className='p-6 text-center text-slate-500'>Carregando templates...</div>
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState(null) // null = novo, objeto = editar
   const [saving, setSaving] = useState(false)
@@ -1530,7 +1531,7 @@ function TemplatesView({ templates, onReload, showToast }) {
       )}
 
       <div className='grid grid-cols-1 lg:grid-cols-2 gap-4'>
-        {templates.map(t => (
+        {templates?.map(t => (
           <div key={t._id} className='bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col gap-3'>
             {/* Header */}
             <div className='flex items-start justify-between gap-2'>
@@ -1630,6 +1631,7 @@ function TemplatesView({ templates, onReload, showToast }) {
 // VIEW: ScheduledView — Mensagens Agendadas (envio único)
 // ══════════════════════════════════════════════════════════════════
 function ScheduledView({ templates }) {
+  if (!templates) return <div className='p-6 text-center text-slate-500'>Carregando dados...</div>
   const [messages, setMessages] = useState([])
   const [loading, setLoading]   = useState(false)
   const [modalOpen, setModalOpen] = useState(false)
@@ -1754,7 +1756,8 @@ function ScheduledView({ templates }) {
                 onChange={v=>setForm(p=>({...p,phone:v}))}
                 onSelect={c => {
                   if (!form.contactName && c.name) {
-                    setForm(p => ({ ...p, contactName: c.name }))
+                    const firstName = c.name.split(' ')[0]
+                    setForm(p => ({ ...p, contactName: firstName }))
                   }
                 }}
                 placeholder='Ex: 5511999999999'
@@ -1767,7 +1770,7 @@ function ScheduledView({ templates }) {
             <Field label='Template (opcional)'>
               <select className={selectCls} value={form.templateId} onChange={e=>handleTemplateChange(e.target.value)}>
                 <option value=''>Digitar mensagem manualmente</option>
-                {templates.map(t=><option key={t._id} value={t._id}>{t.name}</option>)}
+                {templates?.map(t=><option key={t._id} value={t._id}>{t.name}</option>)}
               </select>
             </Field>
             <Field label='Mensagem *'><textarea className={cls(inputCls,'min-h-[100px] resize-y')} value={form.message} onChange={e=>setForm(p=>({...p,message:e.target.value}))} placeholder='Mensagem que será enviada...'/></Field>
@@ -1839,7 +1842,7 @@ function SubsMetricsWidget({ onNavigate }) {
 // ══════════════════════════════════════════════════════════════════
 // VIEW: ClientsView COMPLETA — Gestão + ciclo de assinatura mensal
 // ══════════════════════════════════════════════════════════════════
-function ClientsView() {
+function ClientsView({ syncWAContacts }) {
   const [contacts, setContacts] = useState([])
   const [modalOpen, setModalOpen] = useState(false)
   const [notifModal, setNotifModal] = useState(false)
@@ -2440,8 +2443,11 @@ function PipelineView() {
       )}
 
       {/* ── ABA MENSAGENS DAS SEMANAS ── */}
-      {tab==='config' && pipelineCfg && (
+      {tab==='config' && (
         <div className='space-y-4'>
+          {!pipelineCfg && <div className='py-10 text-center text-slate-500 text-sm'>Carregando configurações...</div>}
+          {pipelineCfg && (
+            <>
           <div className='text-sm text-slate-400'>Configure os textos enviados automaticamente em cada semana. Use <code className='bg-slate-700 px-1 rounded text-xs'>{'{{nome}}'}</code> para o nome do cliente.</div>
           {(pipelineCfg.weeks||[]).sort((a,b)=>a.week-b.week).map((w, i) => (
             <div key={w.week} className='bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-3'>
@@ -2490,16 +2496,21 @@ function PipelineView() {
             </Field>
           </div>
 
-          <button onClick={savePipelineCfg} disabled={saving}
-            className='w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-medium text-sm flex items-center justify-center gap-2'>
-            {saving?<Loader2 className='h-4 w-4 animate-spin'/>:<Bell className='h-4 w-4'/>} Salvar mensagens da esteira
-          </button>
+            <button onClick={savePipelineCfg} disabled={saving}
+              className='w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-medium text-sm flex items-center justify-center gap-2'>
+              {saving?<Loader2 className='h-4 w-4 animate-spin'/>:<Bell className='h-4 w-4'/>} Salvar mensagens da esteira
+            </button>
+            </>
+          )}
         </div>
       )}
 
       {/* ── ABA BOAS-VINDAS ── */}
-      {tab==='onboarding' && onboardCfg && (
+      {tab==='onboarding' && (
         <div className='space-y-4'>
+          {!onboardCfg && <div className='py-10 text-center text-slate-500 text-sm'>Carregando configurações...</div>}
+          {onboardCfg && (
+            <>
           {/* Toggle ativo */}
           <div className='flex items-center justify-between bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-3'>
             <div>
@@ -2581,10 +2592,12 @@ function PipelineView() {
             + Adicionar passo
           </button>
 
-          <button onClick={saveOnboardCfg} disabled={saving}
-            className='w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-medium text-sm flex items-center justify-center gap-2'>
-            {saving?<Loader2 className='h-4 w-4 animate-spin'/>:<Bell className='h-4 w-4'/>} Salvar boas-vindas
-          </button>
+            <button onClick={saveOnboardCfg} disabled={saving}
+              className='w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-medium text-sm flex items-center justify-center gap-2'>
+              {saving?<Loader2 className='h-4 w-4 animate-spin'/>:<Bell className='h-4 w-4'/>} Salvar boas-vindas
+            </button>
+            </>
+          )}
         </div>
       )}
 

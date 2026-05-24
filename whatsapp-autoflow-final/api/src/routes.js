@@ -83,7 +83,6 @@ router.get("/dashboard", auth, async (_req, res) => {
     upcoming: upcoming.slice(0, 5),
     pipelineActive,
     lastSync: await WAContact.findOne().sort({ updatedAt: -1 }).then(c => c?.updatedAt || null),
-    cachedContactsCount: await WAContact.countDocuments({}),
   });
 });
 

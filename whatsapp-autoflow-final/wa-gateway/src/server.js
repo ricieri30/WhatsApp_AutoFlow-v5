@@ -57,55 +57,39 @@ async function start() {
 
   // ── Capturar contatos ─────────────────────────────────────────
   sock.ev.on("messaging-history.set", ({ contacts, chats }) => {
-    console.log(`[Baileys] messaging-history.set: ${contacts?.length||0} contatos, ${chats?.length||0} chats`);
     if (contacts) contacts.forEach(addContact);
     if (chats) chats.forEach(c => addContact({ id: c.id, name: c.name }));
   });
 
   sock.ev.on("chats.set", ({ chats }) => {
-    console.log(`[Baileys] chats.set: ${chats?.length||0} chats`);
     if (chats) chats.forEach(c => addContact({ id: c.id, name: c.name }));
   });
 
   sock.ev.on("contacts.set", ({ contacts }) => {
-    console.log(`[Baileys] contacts.set: ${contacts?.length||0} contatos`);
     if (contacts) contacts.forEach(addContact);
   });
 
   sock.ev.on("contacts.upsert", (contacts) => {
-    console.log(`[Baileys] contacts.upsert: ${contacts?.length||0} contatos`);
     contacts.forEach(addContact);
   });
 
   sock.ev.on("contacts.update", (contacts) => {
-    contacts.forEach(c => {
-      const existing = contactsMap.get(c.id) || {};
-      const name = c.name || c.notify || c.verifiedName || existing.name || null;
-      contactsMap.set(c.id, { ...existing, ...c, name, phone: normalizePhone(c.id) });
-    });
+    contacts.forEach(addContact);
   });
 
   // Capturar de chats também (contatos que mandaram mensagem)
   sock.ev.on("chats.upsert", (chats) => {
-    chats.forEach(chat => {
-      if (chat.id && !chat.id.includes('@g.us')) {
-        addContact({ id: chat.id, name: chat.name });
-      }
-    });
+    chats.forEach(addContact);
   });
 
   sock.ev.on("chats.update", (chats) => {
-    chats.forEach(chat => {
-      if (chat.id && !chat.id.includes('@g.us')) {
-        addContact({ id: chat.id, name: chat.name });
-      }
-    });
+    chats.forEach(addContact);
   });
 
   // Capturar nomes de mensagens recebidas (pushName)
   sock.ev.on("messages.upsert", ({ messages }) => {
     for (const msg of messages) {
-      if (!msg.key.fromMe && msg.pushName && msg.key.remoteJid && !msg.key.remoteJid.includes('@g.us')) {
+      if (!msg.key.fromMe && msg.pushName && msg.key.remoteJid) {
         addContact({ id: msg.key.remoteJid, notify: msg.pushName });
       }
     }
@@ -144,7 +128,7 @@ app.get("/debug/contacts", (_req, res) => {
 // GET /contacts?q=busca&limit=20
 app.get("/contacts", (req, res) => {
   const q = (req.query.q || '').toLowerCase().trim();
-  const limit = Math.min(parseInt(req.query.limit || '50', 10), 10000);
+  const limit = Math.min(parseInt(req.query.limit || '50', 10), 50000);
 
   let list = Array.from(contactsMap.values());
 
