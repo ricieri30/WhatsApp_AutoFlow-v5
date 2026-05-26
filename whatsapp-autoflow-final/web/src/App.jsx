@@ -5,7 +5,7 @@ import {
   Smartphone, LogOut, Plus, Search, Copy, RefreshCw,
   Users, Bell, Settings, ChevronRight, Wifi, WifiOff, Loader2,
   X, MessageSquareReply, Phone, UserPlus, Calendar, Clock, ToggleLeft, ToggleRight,
-  Trash2, Pencil, ClipboardCopy
+  Trash2, Pencil, ClipboardCopy, Download, Upload
 } from 'lucide-react'
 
 // ── Constantes ───────────────────────────────────────────────────
@@ -18,13 +18,96 @@ const labels = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb']
 function cls(...c){ return c.filter(Boolean).join(' ') }
 
 // ══════════════════════════════════════════════════════════════════
+// COMPONENTE: BackupImportBar
+// Botões reutilizáveis de Backup (exportar JSON) e Importar (subir JSON)
+// para qualquer aba/função do sistema.
+//   endpoint  → rota da API (ex: 'auto-reply', 'templates', 'contacts')
+//   filename  → nome base do arquivo de backup
+//   onReload  → callback chamado após importar
+//   transform → função opcional p/ limpar cada item antes de reenviar
+// ══════════════════════════════════════════════════════════════════
+function BackupImportBar({ endpoint, filename = 'backup', onReload, transform, showToast }) {
+  const [busy, setBusy] = useState(false)
+  const fileRef = useRef(null)
+
+  const notify = (msg, type='info') => {
+    if (typeof showToast === 'function') showToast(msg, type)
+    else if (type === 'error') alert(msg)
+  }
+
+  // ── BACKUP: baixa todos os dados da aba como arquivo .json ──────
+  async function handleBackup() {
+    setBusy(true)
+    try {
+      const data = await api(endpoint)
+      const arr = Array.isArray(data) ? data : (data?.items || [data])
+      const blob = new Blob([JSON.stringify(arr, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      const stamp = new Date().toISOString().slice(0, 10)
+      a.href = url
+      a.download = `${filename}-${stamp}.json`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      notify(`Backup de ${arr.length} item(ns) baixado!`, 'success')
+    } catch (e) {
+      notify('Erro ao gerar backup: ' + e.message, 'error')
+    } finally { setBusy(false) }
+  }
+
+  // ── IMPORTAR: lê um .json e recria os itens via POST ────────────
+  async function handleImportFile(e) {
+    const file = e.target.files?.[0]
+    e.target.value = '' // permitir reimportar o mesmo arquivo
+    if (!file) return
+    setBusy(true)
+    try {
+      const text = await file.text()
+      let items = JSON.parse(text)
+      if (!Array.isArray(items)) items = [items]
+
+      let ok = 0, fail = 0
+      for (const raw of items) {
+        try {
+          // remover campos gerados pelo banco para criar como novo
+          const { _id, __v, createdAt, updatedAt, ...rest } = raw
+          const body = transform ? transform(rest) : rest
+          await api(endpoint, { method: 'POST', body })
+          ok++
+        } catch { fail++ }
+      }
+      notify(`Importação concluída: ${ok} adicionado(s)${fail ? `, ${fail} falhou(ram)` : ''}.`, fail ? 'error' : 'success')
+      if (typeof onReload === 'function') await onReload()
+    } catch (err) {
+      notify('Arquivo inválido. Selecione um backup .json válido.', 'error')
+    } finally { setBusy(false) }
+  }
+
+  return (
+    <div className='flex items-center gap-2'>
+      <input ref={fileRef} type='file' accept='.json,application/json' className='hidden' onChange={handleImportFile}/>
+      <button onClick={()=>fileRef.current?.click()} disabled={busy} title='Importar de um arquivo .json'
+        className='flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-300 text-sm transition-colors border border-slate-700'>
+        {busy ? <Loader2 className='h-4 w-4 animate-spin'/> : <Upload className='h-4 w-4'/>} Importar
+      </button>
+      <button onClick={handleBackup} disabled={busy} title='Baixar backup em .json'
+        className='flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-300 text-sm transition-colors border border-slate-700'>
+        {busy ? <Loader2 className='h-4 w-4 animate-spin'/> : <Download className='h-4 w-4'/>} Backup
+      </button>
+    </div>
+  )
+}
+
+// ══════════════════════════════════════════════════════════════════
 // COMPONENTE: PhoneAutocomplete
 // Autocompleta números com contatos do WhatsApp conectado
 // ══════════════════════════════════════════════════════════════════
 // PhoneAutocomplete — lógica simples: digita → API → mostra
 // Baseado na versão que funcionava corretamente
 // ══════════════════════════════════════════════════════════════════
-function PhoneAutocomplete({ value, onChange, placeholder = 'Ex: 5511999999999', className }) {
+function PhoneAutocomplete({ value, onChange, onPickContact, placeholder = 'Ex: 5511999999999', className }) {
   const [suggestions, setSuggestions] = useState([])
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -53,12 +136,16 @@ function PhoneAutocomplete({ value, onChange, placeholder = 'Ex: 5511999999999',
   function handleInput(e) {
     const v = e.target.value
     onChange(v)
+    // Ao digitar manualmente, limpar nome associado
+    if (onPickContact) onPickContact({ phone: v, name: '' })
     clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(() => fetchSuggestions(v), 280)
   }
 
   function pick(contact) {
     onChange(contact.phone)
+    // Passar o contato completo (com nome) para o componente pai
+    if (onPickContact) onPickContact(contact)
     setSuggestions([])
     setOpen(false)
   }
@@ -814,6 +901,7 @@ export default function App(){
                   <input className='pl-9 bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 w-64 text-sm focus:outline-none focus:border-indigo-500'
                     placeholder='Buscar...' value={q} onChange={e=>setQ(e.target.value)}/>
                 </div>
+                <BackupImportBar endpoint='recurring' filename='automacoes' onReload={loadAll}/>
                 <button onClick={()=>setCreateOpen(true)}
                   className='flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm transition-colors'>
                   <Plus className='h-4 w-4'/> Nova
@@ -1078,7 +1166,7 @@ function AutoReplyView() {
   const [testResult, setTestResult] = useState(null)
   const [testing, setTesting]       = useState(false)
 
-  const emptyForm = { keyword:'', targetPhone:'', reply:'', startTime:'00:00', endTime:'23:59', active:true }
+  const emptyForm = { keyword:'', targetPhone:'', targetName:'', reply:'', startTime:'00:00', endTime:'23:59', active:true }
   const [form, setForm] = useState(emptyForm)
 
   // ── Carregar regras da API ──────────────────────────────────────
@@ -1137,7 +1225,7 @@ function AutoReplyView() {
 
   function openEdit(r) {
     setEditingId(r._id)
-    setForm({ keyword:r.keyword, targetPhone:r.targetPhone||'', reply:r.reply, startTime:r.startTime||'00:00', endTime:r.endTime||'23:59', active:r.active })
+    setForm({ keyword:r.keyword, targetPhone:r.targetPhone||'', targetName:r.targetName||'', reply:r.reply, startTime:r.startTime||'00:00', endTime:r.endTime||'23:59', active:r.active })
     setClientMode(r.targetPhone ? 'specific' : 'all')
     setModalOpen(true)
   }
@@ -1147,7 +1235,8 @@ function AutoReplyView() {
     setSaving(true)
     try {
       const phone = clientMode === 'all' ? '' : form.targetPhone
-      const body = { ...form, targetPhone: phone }
+      const name  = clientMode === 'all' ? '' : (form.targetName || '')
+      const body = { ...form, targetPhone: phone, targetName: name }
       if (editingId) await api(`auto-reply/${editingId}`, { method: 'PUT', body })
       else           await api('auto-reply', { method: 'POST', body })
       setModalOpen(false); setForm(emptyForm)
@@ -1215,10 +1304,13 @@ function AutoReplyView() {
           <h1 className='text-xl font-bold text-white'>Respostas Automáticas</h1>
           <p className='text-sm text-slate-500 mt-0.5'>Regras de resposta por palavra-chave</p>
         </div>
-        <button onClick={openNew}
-          className='flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm transition-colors shadow-lg shadow-indigo-500/20'>
-          <Plus className='h-4 w-4'/> Nova Regra
-        </button>
+        <div className='flex items-center gap-2'>
+          <BackupImportBar endpoint='auto-reply' filename='respostas-automaticas' onReload={loadRules}/>
+          <button onClick={openNew}
+            className='flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm transition-colors shadow-lg shadow-indigo-500/20'>
+            <Plus className='h-4 w-4'/> Nova Regra
+          </button>
+        </div>
       </div>
 
       <div className='flex items-center gap-3'>
@@ -1257,7 +1349,7 @@ function AutoReplyView() {
             <div className='bg-slate-900/60 rounded-xl p-3 text-sm text-slate-300 leading-relaxed min-h-[56px]'>{r.reply}</div>
 
             <div className='flex items-center gap-4 text-xs text-slate-500 flex-wrap'>
-              <span className='flex items-center gap-1.5'><Users className='h-3.5 w-3.5'/>{r.targetPhone ? r.targetPhone : 'Todos os clientes'}</span>
+              <span className='flex items-center gap-1.5'><Users className='h-3.5 w-3.5'/>{r.targetPhone ? (r.targetName || r.targetPhone) : 'Todos os clientes'}</span>
               <span className='flex items-center gap-1.5'><Clock className='h-3.5 w-3.5'/>{r.startTime||'00:00'} - {r.endTime||'23:59'}</span>
               <span className={cls('flex items-center gap-1 font-medium', r.active ? 'text-emerald-400' : 'text-slate-500')}>
                 <span className={cls('w-1.5 h-1.5 rounded-full', r.active ? 'bg-emerald-400' : 'bg-slate-600')}/>
@@ -1304,7 +1396,11 @@ function AutoReplyView() {
                 </button>
               </div>
               {clientMode === 'specific' ? (
-                <PhoneAutocomplete value={form.targetPhone} onChange={v=>setForm(p=>({...p,targetPhone:v}))} placeholder='Buscar contato do WhatsApp...'/>
+                <PhoneAutocomplete
+                  value={form.targetPhone}
+                  onChange={v=>setForm(p=>({...p,targetPhone:v}))}
+                  onPickContact={c=>setForm(p=>({...p,targetPhone:c.phone||'',targetName:c.name||''}))}
+                  placeholder='Buscar contato do WhatsApp...'/>
               ) : (
                 <div className='bg-slate-800/50 border border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-500 italic'>Responde a todos os contatos</div>
               )}
@@ -1487,10 +1583,13 @@ function TemplatesView({ templates, onReload, showToast }) {
           <h1 className='text-xl font-bold text-white'>Templates</h1>
           <p className='text-sm text-slate-500 mt-0.5'>Mensagens reutilizáveis com variáveis dinâmicas</p>
         </div>
-        <button onClick={openNew}
-          className='flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm transition-colors'>
-          <Plus className='h-4 w-4'/> Novo template
-        </button>
+        <div className='flex items-center gap-2'>
+          <BackupImportBar endpoint='templates' filename='templates' onReload={onReload} showToast={showToast}/>
+          <button onClick={openNew}
+            className='flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm transition-colors'>
+            <Plus className='h-4 w-4'/> Novo template
+          </button>
+        </div>
       </div>
 
       {templates.length === 0 && (
@@ -1668,9 +1767,12 @@ function ScheduledView({ templates }) {
           <h1 className='text-xl font-bold text-white'>Agendamentos</h1>
           <p className='text-sm text-slate-500 mt-0.5'>Mensagens únicas em data e hora específica</p>
         </div>
-        <button onClick={()=>setModalOpen(true)} className='flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm transition-colors'>
-          <Plus className='h-4 w-4'/> Novo agendamento
-        </button>
+        <div className='flex items-center gap-2'>
+          <BackupImportBar endpoint='scheduled' filename='agendamentos' onReload={()=>load(filter)}/>
+          <button onClick={()=>setModalOpen(true)} className='flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm transition-colors'>
+            <Plus className='h-4 w-4'/> Novo agendamento
+          </button>
+        </div>
       </div>
 
       <div className='flex gap-2 flex-wrap'>
@@ -1951,6 +2053,7 @@ function ClientsView() {
           <p className='text-sm text-slate-500 mt-0.5'>{contacts.length} cliente{contacts.length!==1?'s':''} cadastrado{contacts.length!==1?'s':''}</p>
         </div>
         <div className='flex gap-2'>
+          <BackupImportBar endpoint='contacts' filename='clientes' onReload={load}/>
           <button onClick={()=>setNotifModal(true)}
             className='flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm transition-colors'>
             <Bell className='h-4 w-4'/> Textos de Aviso
@@ -2294,6 +2397,7 @@ function PipelineView() {
           <p className='text-sm text-slate-500 mt-0.5'>Onboarding → Semana 1 → 2 → 3 → Dia 30</p>
         </div>
         <div className='flex gap-2'>
+          <BackupImportBar endpoint='pipeline/contacts' filename='esteira' onReload={load}/>
           <button onClick={load} className='flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm'>
             <RefreshCw className={cls('h-4 w-4', loading&&'animate-spin')}/>
           </button>

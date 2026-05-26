@@ -11,6 +11,52 @@ import { makeQueue, upsertRecurringScheduler, removeRecurringScheduler } from ".
 const router = express.Router();
 const queue = makeQueue();
 
+// ══════════════════════════════════════════════════════════════════
+// HELPERS COMPARTILHADOS — usados por /auto-reply/test e /internal/message
+// Garante que o TESTE e a PRODUÇÃO usem exatamente a mesma lógica.
+// ══════════════════════════════════════════════════════════════════
+
+// Normaliza um número/JID: remove sufixos, espaços, +, traços, parênteses
+function normPhone(j = "") {
+  return String(j)
+    .replace(/@s\.whatsapp\.net$/i, "")
+    .replace(/@lid$/i, "")
+    .replace(/@.*$/, "")
+    .replace(/[^\d]/g, ""); // mantém só dígitos
+}
+
+// Normaliza texto para comparação: minúsculas + remove espaços extras das pontas
+function normText(t = "") {
+  return String(t).toLowerCase().trim().replace(/\s+/g, " ");
+}
+
+// Verifica se o horário atual está dentro da faixa (trata virada de meia-noite)
+function timeInRange(start = "00:00", end = "23:59") {
+  const now = new Date();
+  const curMin = now.getHours() * 60 + now.getMinutes();
+  const [sh, sm] = String(start).split(":").map(Number);
+  const [eh, em] = String(end).split(":").map(Number);
+  const s = (sh || 0) * 60 + (sm || 0);
+  const e = (eh || 0) * 60 + (em || 0);
+  return s > e ? (curMin >= s || curMin <= e) : (curMin >= s && curMin <= e);
+}
+
+// Avalia uma regra contra uma mensagem. Retorna o motivo do skip (ou null se casa).
+// candidates = Set de números normalizados que identificam o remetente.
+function evaluateRule(rule, msgText, candidates) {
+  const ruleKw    = normText(rule.keyword);
+  const msgNorm   = normText(msgText);
+  const rulePhone = normPhone(rule.targetPhone);
+
+  // Contato específico: precisa bater com algum id do remetente
+  if (rulePhone && !candidates.has(rulePhone)) return "numero_diferente";
+  // Horário
+  if (!timeInRange(rule.startTime, rule.endTime)) return "fora_horario";
+  // Palavra-chave (já normalizada dos dois lados → espaço no fim não atrapalha)
+  if (!ruleKw || !msgNorm.includes(ruleKw)) return "keyword_nao_encontrada";
+  return null; // casou!
+}
+
 // ── Job diário de notificações de assinatura ──────────────────────
 // Agenda uma verificação todo dia às 08:00 BRT
 async function scheduleSubscriptionCheck() {
@@ -418,20 +464,13 @@ router.delete("/scheduled/:id", auth, async (req, res) => {
   res.json({ ok: true });
 });
 
-// POST /auto-reply/test — simula uma mensagem recebida para testar regras
+// POST /auto-reply/test — simula uma mensagem recebida e mostra qual regra ativaria
 router.post("/auto-reply/test", auth, async (req, res) => {
   const { phone, text } = req.body;
   if (!phone || !text) return res.status(400).json({ error: "phone_e_text_obrigatorios" });
 
-  const now = new Date();
-  const curMin = now.getHours() * 60 + now.getMinutes();
-
-  function timeInRange(start = "00:00", end = "23:59") {
-    const [sh, sm] = start.split(":").map(Number);
-    const [eh, em] = end.split(":").map(Number);
-    const s = sh * 60 + sm, e = eh * 60 + em;
-    return s > e ? (curMin >= s || curMin < e) : (curMin >= s && curMin <= e);
-  }
+  // Mesmo conjunto de candidatos que a produção montaria
+  const candidates = new Set([normPhone(phone)].filter(Boolean));
 
   const rules = await AutoReply.find({ active: true }).sort({ targetPhone: -1, createdAt: 1 });
 
@@ -439,24 +478,19 @@ router.post("/auto-reply/test", auth, async (req, res) => {
   const checked = [];
 
   for (const rule of rules) {
-    const skip_phone   = rule.targetPhone && rule.targetPhone !== phone;
-    const skip_time    = !timeInRange(rule.startTime, rule.endTime);
-    const skip_keyword = !text.toLowerCase().includes(rule.keyword.toLowerCase());
-
+    const skip_reason = evaluateRule(rule, text, candidates);
     checked.push({
       keyword:     rule.keyword,
       targetPhone: rule.targetPhone || '(todos)',
+      targetName:  rule.targetName || '',
       active:      rule.active,
-      skip_reason: skip_phone ? 'numero_diferente' : skip_time ? 'fora_horario' : skip_keyword ? 'keyword_nao_encontrada' : null,
+      skip_reason,
     });
-
-    if (!skip_phone && !skip_time && !skip_keyword) {
-      matched = rule; break;
-    }
+    if (!skip_reason && !matched) matched = rule;
   }
 
   res.json({
-    input:   { phone, text },
+    input:   { phone: normPhone(phone), text: normText(text) },
     matched: matched ? { keyword: matched.keyword, reply: matched.reply } : null,
     checked,
     total_rules: rules.length,
@@ -469,11 +503,13 @@ router.get("/auto-reply", auth, async (_req, res) =>
 );
 
 router.post("/auto-reply", auth, async (req, res) => {
-  const { keyword, reply, targetPhone, startTime, endTime, active } = req.body;
+  const { keyword, reply, targetPhone, targetName, startTime, endTime, active } = req.body;
   if (!keyword || !reply) return res.status(400).json({ error: "keyword_e_reply_obrigatorios" });
   const doc = await AutoReply.create({
-    keyword, reply,
-    targetPhone: targetPhone || "",
+    keyword:     String(keyword).trim(),       // remove espaços das pontas
+    reply,
+    targetPhone: normPhone(targetPhone || ""),  // só dígitos, consistente
+    targetName:  targetName  || "",
     startTime:   startTime   || "00:00",
     endTime:     endTime     || "23:59",
     active:      active !== false,
@@ -484,9 +520,9 @@ router.post("/auto-reply", auth, async (req, res) => {
 });
 
 router.put("/auto-reply/:id", auth, async (req, res) => {
-  const { keyword, reply, targetPhone, startTime, endTime, active } = req.body;
+  const { keyword, reply, targetPhone, targetName, startTime, endTime, active } = req.body;
   const doc = await AutoReply.findByIdAndUpdate(req.params.id,
-    { keyword, reply, targetPhone: targetPhone||"", startTime: startTime||"00:00", endTime: endTime||"23:59", active },
+    { keyword: String(keyword||"").trim(), reply, targetPhone: normPhone(targetPhone||""), targetName: targetName||"", startTime: startTime||"00:00", endTime: endTime||"23:59", active },
     { new: true }
   );
   if (!doc) return res.status(404).json({ error: "not_found" });
@@ -498,7 +534,7 @@ router.post("/auto-reply/:id/clone", auth, async (req, res) => {
   if (!orig) return res.status(404).json({ error: "not_found" });
   const clone = await AutoReply.create({
     keyword: orig.keyword + " (cópia)", reply: orig.reply,
-    targetPhone: orig.targetPhone, startTime: orig.startTime,
+    targetPhone: orig.targetPhone, targetName: orig.targetName, startTime: orig.startTime,
     endTime: orig.endTime, active: false, createdBy: req.user.email,
   });
   await Audit.create({ who: req.user.email, action: "CLONE_AUTO_REPLY", entity: String(clone._id), detail: `Clonou: "${orig.keyword}"`, ok: true });
@@ -513,47 +549,30 @@ router.delete("/auto-reply/:id", auth, async (req, res) => {
 // ── Webhook interno — recebe mensagens do wa-gateway ─────────────
 // Chamado pelo gateway quando chega mensagem no WhatsApp
 router.post("/internal/message", async (req, res) => {
-  const { from, text, pushName } = req.body;
+  const { from, text, pushName, fromLid, fromReal, replyTo } = req.body;
   if (!from || !text) return res.status(400).json({ error: "from_e_text_obrigatorios" });
 
-  const phone = from.replace(/@s\.whatsapp\.net$/, "").replace(/@.*$/, "");
-  console.log(`📨 /internal/message recebido: from=${phone} text="${text}"`);
+  // Conjunto de números que identificam o remetente (número real + LID)
+  const phone = normPhone(from);
+  const candidates = new Set([phone, normPhone(fromLid), normPhone(fromReal)].filter(Boolean));
+  console.log(`📨 /internal/message: from=${phone} (ids: ${[...candidates].join(",")}) text="${text}"`);
 
-  const now = new Date();
-  const curMin = now.getHours() * 60 + now.getMinutes();
-
-  function timeInRange(start = "00:00", end = "23:59") {
-    const [sh, sm] = start.split(":").map(Number);
-    const [eh, em] = end.split(":").map(Number);
-    const s = sh * 60 + sm, e = eh * 60 + em;
-    return s > e ? (curMin >= s || curMin < e) : (curMin >= s && curMin <= e);
-  }
-
-  // Buscar regras ativas ordenadas por especificidade (com targetPhone primeiro)
   const rules = await AutoReply.find({ active: true }).sort({ targetPhone: -1, createdAt: 1 });
 
   let matched = null;
   for (const rule of rules) {
-    // Verificar se é para este contato específico ou para todos
-    if (rule.targetPhone && rule.targetPhone !== phone) continue;
-    // Verificar horário
-    if (!timeInRange(rule.startTime, rule.endTime)) continue;
-    // Verificar palavra-chave (case insensitive)
-    if (text.toLowerCase().includes(rule.keyword.toLowerCase())) {
-      matched = rule;
-      break;
-    }
+    if (!evaluateRule(rule, text, candidates)) { matched = rule; break; }
   }
 
   if (matched) {
     console.log(`✅ Regra "${matched.keyword}" ativada para ${phone}`);
     try {
-      const name = pushName || phone;
+      const name = pushName || matched.targetName || phone;
       const replyText = (matched.reply || "").replace(/\{\{nome\}\}/gi, name);
       const sendResp = await fetch(`${process.env.WA_GATEWAY_URL}/send`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ to: phone, text: replyText }),
+        body: JSON.stringify({ to: phone, text: replyText, replyTo: replyTo || from }),
       });
       const sendResult = await sendResp.json().catch(() => ({}));
       console.log(`📤 Resposta enviada: ${JSON.stringify(sendResult)}`);

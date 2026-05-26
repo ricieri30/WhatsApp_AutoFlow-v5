@@ -67,6 +67,7 @@ const AutoReplySchema = new mongoose.Schema({
   keyword:     { type: String, required: true },
   reply:       { type: String, required: true },
   targetPhone: { type: String, default: "" },
+  targetName:  { type: String, default: "" },
   startTime:   { type: String, default: "00:00" },
   endTime:     { type: String, default: "23:59" },
   active:      { type: Boolean, default: true },
